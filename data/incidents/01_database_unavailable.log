@@ -1,0 +1,3 @@
+2026-10-22T10:00:00Z INFO request_id=req-101 POST /users
+2026-10-22T10:00:00Z ERROR request_id=req-101 database connection refused host=db port=5432
+2026-10-22T10:00:01Z ERROR request_id=req-101 POST /users status=500

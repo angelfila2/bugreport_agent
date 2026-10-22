@@ -1,0 +1,2 @@
+2026-10-22T10:10:00Z INFO request_id=req-301 POST /users
+2026-10-22T10:10:02Z ERROR request_id=req-301 POST /users status=500

@@ -1,0 +1,5 @@
+2026-10-22T10:05:00Z WARN request_id=req-200 cache unavailable; falling back to database
+2026-10-22T10:05:00Z INFO request_id=req-200 GET /users status=200
+2026-10-22T10:06:00Z INFO request_id=req-201 POST /users
+2026-10-22T10:06:00Z ERROR request_id=req-201 duplicate key violates unique constraint users_email_key
+2026-10-22T10:06:00Z ERROR request_id=req-201 POST /users status=500
