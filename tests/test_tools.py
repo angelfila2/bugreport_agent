@@ -1,4 +1,4 @@
-"""Checks for fixture access and evidence retrieval; add agent evaluations Friday."""
+"""Checks for log access, path restrictions, and evidence retrieval."""
 import pytest
 
 from bugpilot.tools import read_log, search_notes

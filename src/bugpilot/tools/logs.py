@@ -1,4 +1,4 @@
-"""Read only the supplied incident fixtures, with source line numbers."""
+"""Read incident logs from the configured directory with source line numbers."""
 from bugpilot.config import INCIDENTS_DIR
 
 

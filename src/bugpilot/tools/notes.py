@@ -1,4 +1,4 @@
-"""A small keyword search; no vector database needed for this exercise."""
+"""Keyword retrieval for local troubleshooting notes."""
 import re
 
 from bugpilot.config import NOTES_DIR

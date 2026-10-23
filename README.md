@@ -1,155 +1,114 @@
 # BugPilot
 
-A Python AI agent that investigates API error logs and produces a structured debugging report with supporting evidence.
+**An AI incident investigation MVP built with Python, LangChain, Ollama, and Streamlit.**
 
-## The problem
+BugPilot helps developers investigate failed API requests from local logs. It produces structured reports with cited evidence, suggested next steps, and missing diagnostic information.
 
-An HTTP 500 tells a developer that a request failed, but it does not explain why. BugPilot reads the incident log, searches local troubleshooting notes, and suggests relevant next checks. Each report includes source filenames, line numbers, and log excerpts so the developer can review the evidence.
+## Features
 
-## How it works
+- Investigates logs with a local Llama model and troubleshooting-note search.
+- Returns structured reports containing a summary, likely cause, evidence, suggested fixes, and missing information.
+- Checks evidence filenames, line numbers, and excerpts against the original log.
+- Displays tool inputs, tool results, and execution status in an expandable trace.
+- Preserves partial traces when an investigation fails.
+- Shows actionable messages for Ollama connection failures, timeouts, missing models or files, execution limits, and invalid reports.
+- Returns an explicit unknown-cause report for the supported status-only HTTP error format.
 
-1. **Investigate:** a LangChain agent uses a local Llama model through Ollama to call `read_log` and `search_notes`.
-2. **Format:** a separate model call uses JSON Schema structured output to turn the investigation and original log into a `DebugReport`.
-3. **Validate:** Pydantic checks the report's structure and field types before it is returned.
+## Quick start
 
-We separated investigation and formatting after the model returned a text answer without populating the agent's structured response. The separate formatting call produced the validated report in our first successful example. Schema validation does not establish that a diagnosis is correct; citations still need review.
+Requires Python 3.10+ compatible with the dependencies, [Ollama](https://ollama.com/download), and sufficient memory for `llama3.2`.
 
-## Current status
-
-The database connection failure example has run successfully from the terminal. It returned the exact log excerpt at line 2, suggested checking the database service, host, and port, and left the underlying cause unconfirmed.
-
-Included:
-
-- Log-reading and keyword-search tools.
-- Three fictional incident logs and troubleshooting notes.
-- A validated report schema and a basic Streamlit interface.
-- Tool tests and an evaluation checklist.
-
-Evaluation across all three incidents, failure handling, and interface improvements remain planned. The Streamlit interface has not yet been verified in this practice session.
-
-## Run locally
-
-### Prerequisites
-
-- Python 3.10 or newer, compatible with the installed LangChain release.
-- Ollama installed and running locally.
-- Enough memory and disk space for the selected model.
-
-Commands below use Windows PowerShell from the project folder. The current code uses the `llama3.2` model tag.
-
-### 1. Prepare Python
+Run from the project directory in Windows PowerShell:
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m pip install langchain langchain-ollama
+ollama pull llama3.2
+.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-LangChain packages currently need the separate installation command because they have not yet been added to `pyproject.toml`. If `.venv` already exists, skip its creation.
+Keep Ollama running. If it is not running, start the Ollama application or run `ollama serve` in a separate terminal. No cloud API key is required for the default local setup.
 
-### 2. Download the model
+Select an incident, enter a question, and click **Investigate**. Expand **Investigation trace** to inspect tool calls and their results.
+
+### Add an incident
+
+Place a UTF-8 `.log` file in `data/incidents/` and refresh the interface. Add troubleshooting guidance as Markdown files in `data/notes/`.
+
+Logs should include timestamps, severity, request IDs, and error details. The deterministic status-only fallback recognizes this specific format:
+
+```text
+2026-10-22T10:10:02Z ERROR request_id=req-301 POST /users status=500
+```
+
+Other logs use the model-driven path. This MVP does not upload files or connect to live services.
+
+### Terminal usage
 
 ```powershell
-ollama pull llama3.2
+.\.venv\Scripts\python.exe -c "from bugpilot.agent import investigate; report = investigate('Why did creating a user fail?', '02_misleading_warning.log'); print(report.model_dump_json(indent=2))"
 ```
 
-Keep Ollama running while using BugPilot. If changing models, update the tag in both `src/bugpilot/agent.py` and `try_model.py` and download the matching model.
-
-The current local Ollama setup does not use an API key or load `.env`. The `.env.example` file is a placeholder for future configuration.
-
-### 3. Check the model connection
+Check the model connection independently:
 
 ```powershell
 .\.venv\Scripts\python.exe try_model.py
 ```
 
-### 4. Investigate one incident
+The model tag is currently `llama3.2` in `src/bugpilot/agent.py` and `try_model.py`. Update both and download the matching model when changing it.
+
+## Architecture
+
+1. **Precheck:** read the selected log and apply the narrowly defined status-only uncertainty rule where applicable.
+2. **Investigate:** a LangChain agent calls `read_log` and `search_notes`. Observable tool events are streamed to the interface.
+3. **Format:** a separate model call creates a `DebugReport` directly from the original log. It does not consume the investigation draft, avoiding propagation of unsupported draft claims.
+4. **Validate:** Pydantic checks the schema; application checks verify citations and reject some unsupported file references. One correction attempt is allowed when validation fails.
+
+The investigation trace helps inspect agent behavior. The final report is generated independently from the log; the investigation is not an input to report generation. Status-only fallback reports bypass the model entirely.
+
+## Report format
+
+| Field | Meaning |
+| --- | --- |
+| `summary` | Brief description of the incident |
+| `likely_cause` | Observed immediate failure, or `null` when unknown |
+| `evidence` | Source filename, line number, and original log excerpt |
+| `suggested_fixes` | Proposed checks or corrective steps |
+| `missing_information` | Additional diagnostic evidence needed |
+
+## Verification
 
 ```powershell
-.\.venv\Scripts\python.exe -c "from bugpilot.agent import investigate; report = investigate('Why did creating a user fail?', '01_database_unavailable.log'); print(report.model_dump_json(indent=2))"
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
-### 5. Open the interface
+The automated suite covers log access, keyword retrieval, failure messages, tool events, and Streamlit interactions, including report persistence and error display. It does not require a running model.
 
-```powershell
-.\.venv\Scripts\python.exe -m streamlit run app.py
-```
-
-Select an incident, enter your question, and click **Investigate** to display the report.
-
-## Example report
-
-This is the output from the first successful terminal run:
-
-```json
-{
-  "summary": "Database Connection Refused",
-  "likely_cause": null,
-  "evidence": [
-    {
-      "source": "01_database_unavailable.log",
-      "line_number": 2,
-      "excerpt": "2026-10-22T10:00:00Z ERROR request_id=req-101 database connection refused host=db port=5432"
-    }
-  ],
-  "suggested_fixes": [
-    "Verify database service health",
-    "Check database host and port configuration"
-  ],
-  "missing_information": [
-    "Database service status",
-    "Database host and port configuration"
-  ]
-}
-```
-
-The connection refusal is observed; the underlying reason is still unknown. A null `likely_cause` preserves that uncertainty. Model wording can vary between runs.
+Three sample scenarios have also been checked manually: database connection refusal, a misleading warning beside a duplicate-email failure, and insufficient diagnostic evidence. See [the evaluation checklist](docs/evaluation.md) for expectations and limitations.
 
 ## Project structure
 
 ```text
-app.py                       Streamlit interface
-try_model.py                 Standalone Ollama connection check
-pyproject.toml               Package configuration and base dependencies
+app.py                         Streamlit interface and trace display
+try_model.py                   Local model connection check
+pyproject.toml                 Package metadata and dependencies
 src/bugpilot/
-  agent.py                   Investigation and report-formatting calls
-  config.py                  Local data paths and configuration
-  models.py                  DebugReport and Evidence schemas
-  tools/
-    logs.py                  Read incident logs with line numbers
-    notes.py                 Search troubleshooting notes by keyword
-data/
-  incidents/                 Three fictional sample logs
-  notes/                     Local troubleshooting guidance
-tests/test_tools.py          Tool checks
-docs/evaluation.md           Expected behavior for the sample incidents
-PRACTICE_PROGRESS.md          Practice progress and stopping point
+  agent.py                     Investigation, events, reports, failure handling
+  config.py                    Local data paths
+  models.py                    Report and evidence schemas
+  tools/logs.py                Numbered incident-log reader
+  tools/notes.py               Keyword-based troubleshooting search
+data/incidents/                Sample logs and additional local incidents
+data/notes/                    Troubleshooting guidance
+tests/                         Automated tool, failure, and interface checks
+docs/evaluation.md             Agent behavior acceptance criteria
 ```
 
-## Checks and limitations
+## MVP limitations
 
-Run the tool tests with:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
-
-These checks cover local tools, not the quality of model-generated diagnoses. Use `docs/evaluation.md` to review agent behavior separately.
-
-- Keyword search can retrieve unrelated guidance, especially for broad queries.
-- A model can still invent claims or citations; review them against the source log.
-- The two-stage flow adds a separate model call for report formatting.
-- This demo reads supplied local fixtures; it does not connect to production systems or apply fixes.
-
-## Practice plan
-
-**Thursday objective: complete.** One sample incident returned a validated report with supporting evidence. This is the agreed stopping point for today's guided practice.
-
-**Friday: two hours.**
-
-- 35 minutes: evaluate all three incidents, including misleading and insufficient evidence.
-- 30 minutes: improve failure handling and show the tool trace.
-- 30 minutes: improve and verify the Streamlit interface.
-- 25 minutes: document results, record a demo, and practise explaining design decisions.
-
-See `PRACTICE_PROGRESS.md` for the saved progress note.
+- Model outputs can contain unsupported claims; schema and citation checks do not prove diagnostic accuracy.
+- Investigation drafts can include irrelevant suggestions even when the final report is grounded.
+- Keyword retrieval may return unrelated guidance for broad queries.
+- The status-only fallback is format-specific and does not infer the user's target request across arbitrary logs.
+- The interface timeout applies to model HTTP operations, not a guaranteed total wall-clock deadline.
+- BugPilot reads local logs and recommends next steps; it does not apply fixes or monitor production systems.

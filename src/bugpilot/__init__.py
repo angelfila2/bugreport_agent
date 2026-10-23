@@ -1,1 +1,1 @@
-"""BugPilot: a debugging agent built as a learning project."""
+"""BugPilot: evidence-backed incident investigation."""
